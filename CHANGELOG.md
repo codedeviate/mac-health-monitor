@@ -11,3 +11,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Status model and menu-bar icon selection
 - TOML configuration with validation and commented defaults
+- System metrics sampling for disk, memory, pressure and swap
