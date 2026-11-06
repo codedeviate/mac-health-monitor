@@ -51,6 +51,8 @@ impl Monitor {
             Ok(c) => {
                 self.config = c;
                 self.config_error = None;
+                // Apply a reloaded culprits_count on the next tick.
+                self.last_culprits_at = None;
             }
             Err(e) => self.config_error = Some(e.to_string()),
         }
@@ -65,9 +67,11 @@ impl Monitor {
         procs: impl FnOnce() -> Vec<ProcInfo>,
     ) -> Tick {
         let interval = Duration::from_secs(self.config.culprits_refresh_secs);
+        // Half a tick of slack so timer jitter does not delay sampling by a whole tick.
+        let slack = Duration::from_secs(self.config.refresh_secs) / 2;
         let due = match self.last_culprits_at {
             None => true,
-            Some(t) => now.saturating_duration_since(t) >= interval,
+            Some(t) => now.saturating_duration_since(t) + slack >= interval,
         };
         if due {
             self.culprits = processes::group(&procs(), self.config.culprits_count);
@@ -105,6 +109,29 @@ mod tests {
         m.tick(&ok_snap(), t0, || { calls += 1; vec![] });
         m.tick(&ok_snap(), t0 + Duration::from_secs(5), || { calls += 1; vec![] });
         m.tick(&ok_snap(), t0 + Duration::from_secs(10), || { calls += 1; vec![] });
+        assert_eq!(calls, 2);
+    }
+
+    #[test]
+    fn culprits_slack_tolerates_jitter_but_not_a_full_tick_early() {
+        let mut m = Monitor::new(Ok(Config::default()));
+        let t0 = Instant::now();
+        let mut calls = 0;
+        m.tick(&ok_snap(), t0, || { calls += 1; vec![] });
+        m.tick(&ok_snap(), t0 + Duration::from_secs(5), || { calls += 1; vec![] });
+        assert_eq!(calls, 1);
+        m.tick(&ok_snap(), t0 + Duration::from_millis(9_999), || { calls += 1; vec![] });
+        assert_eq!(calls, 2);
+    }
+
+    #[test]
+    fn set_config_ok_forces_culprit_resample() {
+        let mut m = Monitor::new(Ok(Config::default()));
+        let t0 = Instant::now();
+        let mut calls = 0;
+        m.tick(&ok_snap(), t0, || { calls += 1; vec![] });
+        m.set_config(Ok(Config::default()));
+        m.tick(&ok_snap(), t0 + Duration::from_secs(1), || { calls += 1; vec![] });
         assert_eq!(calls, 2);
     }
 

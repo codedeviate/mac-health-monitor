@@ -19,3 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menu model with formatted values for parameter and culprit rows
 - Monitor state machine tying sampling, evaluation, throttled culprits and the menu together
 - Menu-bar status item with colored health icon and a live-updating dropdown menu
+
+### Fixed
+
+- Culprit labels for CLIs installed under paths containing spaces (no more bogus "Application" group); login-shell dash and process-title colon are trimmed
+- `make install` no longer races `launchctl bootout` against `bootstrap` on reinstall
+- LaunchAgent restarts the app after a crash but stays quit after Quit

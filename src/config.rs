@@ -139,7 +139,7 @@ refresh_secs = 5
 # How often the top-culprit process list is refreshed, in seconds (>= 1).
 culprits_refresh_secs = 10
 
-# Number of top processes shown per resource (1-30).
+# Number of top memory-consuming apps shown in the menu (1-30).
 culprits_count = 8
 
 # Hysteresis: an improving status must pass its threshold by this margin,

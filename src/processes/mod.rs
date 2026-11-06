@@ -43,7 +43,14 @@ pub fn group_key(path: &str, argv0: &str) -> GroupKey {
     {
         return GroupKey::App(app.to_string());
     }
-    let from_argv = basename(argv0.split_whitespace().next().unwrap_or(""));
+    let from_argv = if argv0.contains('/') {
+        // proc_pidpath is authoritative; argv0 may contain spaces in directory names.
+        let from_path = basename(path);
+        if from_path.is_empty() { basename(argv0) } else { from_path }
+    } else {
+        argv0.split_whitespace().next().unwrap_or("")
+    };
+    let from_argv = from_argv.trim_start_matches('-').trim_end_matches(':');
     let name = if !from_argv.is_empty() { from_argv } else { basename(path) };
     GroupKey::Process(if name.is_empty() { "unknown" } else { name }.to_string())
 }
@@ -93,6 +100,26 @@ mod tests {
     #[test]
     fn key_vm() {
         assert_eq!(group_key("/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine", ""), GroupKey::Vm);
+    }
+
+    #[test]
+    fn key_cli_path_with_space() {
+        assert_eq!(
+            group_key(
+                "/Users/x/Library/Application Support/foo/bin/helper",
+                "/Users/x/Library/Application Support/foo/bin/helper --flag"
+            ),
+            GroupKey::Process("helper".into())
+        );
+    }
+
+    #[test]
+    fn key_trims_login_dash_and_colon() {
+        assert_eq!(group_key("/bin/zsh", "-zsh"), GroupKey::Process("zsh".into()));
+        assert_eq!(
+            group_key("/opt/homebrew/sbin/php-fpm", "php-fpm:"),
+            GroupKey::Process("php-fpm".into())
+        );
     }
 
     #[test]
