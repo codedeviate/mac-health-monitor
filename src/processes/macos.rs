@@ -5,7 +5,7 @@ use std::mem::{MaybeUninit, size_of};
 use super::ProcInfo;
 
 /// Lists all pids, growing the buffer until the kernel's answer fits with room to spare.
-fn list_pids() -> Vec<i32> {
+pub(crate) fn list_pids() -> Vec<i32> {
     let mut capacity = 1024usize;
     loop {
         let mut pids = vec![0i32; capacity];
@@ -15,7 +15,8 @@ fn list_pids() -> Vec<i32> {
         if rc <= 0 {
             return Vec::new();
         }
-        let count = rc as usize / size_of::<i32>();
+        // proc_listallpids returns the number of pids, not a byte count.
+        let count = (rc as usize).min(capacity);
         if count < capacity {
             pids.truncate(count);
             return pids;
@@ -54,6 +55,10 @@ fn parse_argv0(buf: &[u8]) -> String {
     let Some(rest) = buf.get(size_of::<i32>()..) else {
         return String::new();
     };
+    let argc = i32::from_ne_bytes([buf[0], buf[1], buf[2], buf[3]]);
+    if argc <= 0 {
+        return String::new();
+    }
     let after_path = match rest.iter().position(|&b| b == 0) {
         Some(i) => &rest[i..],
         None => return String::new(),
@@ -112,13 +117,21 @@ pub fn sample() -> Vec<ProcInfo> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_argv0;
+    use super::{list_pids, parse_argv0};
+
+    #[test]
+    fn list_pids_includes_launchd() {
+        assert!(list_pids().contains(&1));
+    }
 
     #[test]
     fn argv0_parses_normal_and_garbage() {
         let mut b = 2i32.to_ne_bytes().to_vec();
         b.extend_from_slice(b"/usr/bin/x\0\0\0claude\0--flag\0");
         assert_eq!(parse_argv0(&b), "claude");
+        let mut z = 0i32.to_ne_bytes().to_vec();
+        z.extend_from_slice(b"/usr/bin/x\0\0HOME=/root\0");
+        assert_eq!(parse_argv0(&z), "");
         assert_eq!(parse_argv0(&[]), "");
         assert_eq!(parse_argv0(&[1, 2]), "");
         assert_eq!(parse_argv0(&[0, 0, 0, 0, b'a']), "");
