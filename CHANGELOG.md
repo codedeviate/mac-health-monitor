@@ -13,3 +13,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TOML configuration with validation and commented defaults
 - System metrics sampling for disk, memory, pressure and swap
 - Threshold evaluation with hysteresis for disk, memory and swap
+- Per-process memory sampling grouped into top culprits by app
