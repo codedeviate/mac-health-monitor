@@ -5,3 +5,4 @@ pub mod metrics;
 pub mod eval;
 pub mod processes;
 pub mod menu_model;
+pub mod monitor;

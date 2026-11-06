@@ -15,3 +15,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Threshold evaluation with hysteresis for disk, memory and swap
 - Per-process memory sampling grouped into top culprits by app
 - Menu model with formatted values for parameter and culprit rows
+- Monitor state machine tying sampling, evaluation, throttled culprits and the menu together
