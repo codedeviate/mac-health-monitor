@@ -40,7 +40,11 @@ pub fn relaxed(t: &Thresholds, margin_pct: f64) -> Thresholds {
         Direction::HigherIsWorse => 1.0 - m,
         Direction::LowerIsWorse => 1.0 + m,
     };
-    Thresholds { warn: t.warn * k, crit: t.crit * k, direction: t.direction }
+    Thresholds {
+        warn: t.warn * k,
+        crit: t.crit * k,
+        direction: t.direction,
+    }
 }
 
 /// Debounces one parameter: worsening is immediate, improving needs two
@@ -80,7 +84,11 @@ pub struct Evaluation {
 
 impl Evaluation {
     pub fn overall(&self) -> status::Overall {
-        status::Overall { disk: self.disk, memory: self.memory, swap: self.swap }
+        status::Overall {
+            disk: self.disk,
+            memory: self.memory,
+            swap: self.swap,
+        }
     }
 }
 
@@ -102,9 +110,10 @@ impl Evaluator {
             direction: Direction::LowerIsWorse,
         };
         let disk_v = s.disk_free_bytes as f64 / GB;
-        let disk = self
-            .disk
-            .update(classify(disk_v, &disk_t), classify(disk_v, &relaxed(&disk_t, m)));
+        let disk = self.disk.update(
+            classify(disk_v, &disk_t),
+            classify(disk_v, &relaxed(&disk_t, m)),
+        );
 
         let swap_t = Thresholds {
             warn: c.swap.warn_used_gb,
@@ -112,23 +121,33 @@ impl Evaluator {
             direction: Direction::HigherIsWorse,
         };
         let swap_v = s.swap_used_bytes as f64 / GIB;
-        let swap = self
-            .swap
-            .update(classify(swap_v, &swap_t), classify(swap_v, &relaxed(&swap_t, m)));
+        let swap = self.swap.update(
+            classify(swap_v, &swap_t),
+            classify(swap_v, &relaxed(&swap_t, m)),
+        );
 
         let mem_t = Thresholds {
             warn: c.memory.warn_available_pct,
             crit: c.memory.crit_available_pct,
             direction: Direction::LowerIsWorse,
         };
-        let p = if c.memory.use_pressure_level { pressure } else { Status::Ok };
+        let p = if c.memory.use_pressure_level {
+            pressure
+        } else {
+            Status::Ok
+        };
         let mem_v = s.available_pct();
         let memory = self.memory.update(
             p.max(classify(mem_v, &mem_t)),
             p.max(classify(mem_v, &relaxed(&mem_t, m))),
         );
 
-        Evaluation { disk, memory, swap, pressure }
+        Evaluation {
+            disk,
+            memory,
+            swap,
+            pressure,
+        }
     }
 }
 
@@ -137,8 +156,16 @@ mod tests {
     use super::*;
     use crate::status::{IconKind, PressureLevel};
 
-    const SWAP: Thresholds = Thresholds { warn: 4.0, crit: 10.0, direction: Direction::HigherIsWorse };
-    const DISK: Thresholds = Thresholds { warn: 25.0, crit: 10.0, direction: Direction::LowerIsWorse };
+    const SWAP: Thresholds = Thresholds {
+        warn: 4.0,
+        crit: 10.0,
+        direction: Direction::HigherIsWorse,
+    };
+    const DISK: Thresholds = Thresholds {
+        warn: 25.0,
+        crit: 10.0,
+        direction: Direction::LowerIsWorse,
+    };
 
     #[test]
     fn classify_basic() {
@@ -167,7 +194,10 @@ mod tests {
     #[test]
     fn hysteresis_worsens_immediately() {
         let mut h = Hysteresis::default();
-        assert_eq!(h.update(Status::Critical, Status::Critical), Status::Critical);
+        assert_eq!(
+            h.update(Status::Critical, Status::Critical),
+            Status::Critical
+        );
     }
 
     #[test]
@@ -201,8 +231,14 @@ mod tests {
             swap_total_bytes: (21.0 * GIB) as u64,
         };
         let e = Evaluator::default().evaluate(&s, &Config::default());
-        assert_eq!((e.disk, e.memory, e.swap), (Status::Warning, Status::Warning, Status::Critical));
-        assert_eq!(status::select_icon(&e.overall()), (IconKind::Triangle, Status::Critical));
+        assert_eq!(
+            (e.disk, e.memory, e.swap),
+            (Status::Warning, Status::Warning, Status::Critical)
+        );
+        assert_eq!(
+            status::select_icon(&e.overall()),
+            (IconKind::Triangle, Status::Critical)
+        );
     }
 
     #[test]

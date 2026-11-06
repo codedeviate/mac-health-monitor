@@ -40,9 +40,7 @@ fn pid_footprint(pid: i32) -> Option<u64> {
     let mut info = MaybeUninit::<libc::rusage_info_v2>::zeroed();
     // SAFETY: `info` is a writable rusage_info_v2 buffer, which is what flavor
     // RUSAGE_INFO_V2 fills in (the C API takes it as an opaque pointer).
-    let rc = unsafe {
-        libc::proc_pid_rusage(pid, libc::RUSAGE_INFO_V2, info.as_mut_ptr().cast())
-    };
+    let rc = unsafe { libc::proc_pid_rusage(pid, libc::RUSAGE_INFO_V2, info.as_mut_ptr().cast()) };
     if rc != 0 {
         return None;
     }
@@ -76,7 +74,14 @@ fn pid_argv0(pid: i32) -> String {
     let mut len = 0usize;
     // SAFETY: `mib` has 3 elements; a null output buffer asks only for the required size.
     let rc = unsafe {
-        libc::sysctl(mib.as_mut_ptr(), 3, std::ptr::null_mut(), &mut len, std::ptr::null_mut(), 0)
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            3,
+            std::ptr::null_mut(),
+            &mut len,
+            std::ptr::null_mut(),
+            0,
+        )
     };
     if rc != 0 || len == 0 {
         return String::new();
@@ -107,7 +112,12 @@ pub fn sample_pid(pid: i32) -> Option<ProcInfo> {
     }
     let path = pid_path(pid)?;
     let footprint_bytes = pid_footprint(pid)?;
-    Some(ProcInfo { pid, path, argv0: pid_argv0(pid), footprint_bytes })
+    Some(ProcInfo {
+        pid,
+        path,
+        argv0: pid_argv0(pid),
+        footprint_bytes,
+    })
 }
 
 /// Samples every process we are allowed to inspect.

@@ -89,25 +89,44 @@ mod tests {
     use Status::*;
 
     fn ov(d: Status, m: Status, s: Status) -> Overall {
-        Overall { disk: d, memory: m, swap: s }
+        Overall {
+            disk: d,
+            memory: m,
+            swap: s,
+        }
     }
 
     #[test]
     fn all_ok_is_green_thumb() {
-        assert_eq!(select_icon(&ov(Ok, Ok, Ok)), (IconKind::ThumbsUp, Status::Ok));
+        assert_eq!(
+            select_icon(&ov(Ok, Ok, Ok)),
+            (IconKind::ThumbsUp, Status::Ok)
+        );
     }
 
     #[test]
     fn single_issue_picks_its_icon() {
         assert_eq!(select_icon(&ov(Ok, Warning, Ok)), (IconKind::Chip, Warning));
-        assert_eq!(select_icon(&ov(Critical, Ok, Ok)), (IconKind::Drive, Critical));
-        assert_eq!(select_icon(&ov(Ok, Ok, Warning)), (IconKind::Recycle, Warning));
+        assert_eq!(
+            select_icon(&ov(Critical, Ok, Ok)),
+            (IconKind::Drive, Critical)
+        );
+        assert_eq!(
+            select_icon(&ov(Ok, Ok, Warning)),
+            (IconKind::Recycle, Warning)
+        );
     }
 
     #[test]
     fn multiple_issues_triangle_worst_color() {
-        assert_eq!(select_icon(&ov(Warning, Ok, Critical)), (IconKind::Triangle, Critical));
-        assert_eq!(select_icon(&ov(Warning, Warning, Ok)), (IconKind::Triangle, Warning));
+        assert_eq!(
+            select_icon(&ov(Warning, Ok, Critical)),
+            (IconKind::Triangle, Critical)
+        );
+        assert_eq!(
+            select_icon(&ov(Warning, Warning, Ok)),
+            (IconKind::Triangle, Warning)
+        );
     }
 
     #[test]

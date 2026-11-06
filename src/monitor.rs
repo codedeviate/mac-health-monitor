@@ -5,7 +5,7 @@ use crate::eval::Evaluator;
 use crate::menu_model::{self, MenuModel};
 use crate::metrics::Snapshot;
 use crate::processes::{self, Culprit, ProcInfo};
-use crate::status::{select_icon, IconKind, Status};
+use crate::status::{IconKind, Status, select_icon};
 
 /// Result of one monitor tick: what the UI should display.
 #[derive(Debug, Clone, PartialEq)]
@@ -106,9 +106,18 @@ mod tests {
         let mut m = Monitor::new(Ok(Config::default()));
         let t0 = Instant::now();
         let mut calls = 0;
-        m.tick(&ok_snap(), t0, || { calls += 1; vec![] });
-        m.tick(&ok_snap(), t0 + Duration::from_secs(5), || { calls += 1; vec![] });
-        m.tick(&ok_snap(), t0 + Duration::from_secs(10), || { calls += 1; vec![] });
+        m.tick(&ok_snap(), t0, || {
+            calls += 1;
+            vec![]
+        });
+        m.tick(&ok_snap(), t0 + Duration::from_secs(5), || {
+            calls += 1;
+            vec![]
+        });
+        m.tick(&ok_snap(), t0 + Duration::from_secs(10), || {
+            calls += 1;
+            vec![]
+        });
         assert_eq!(calls, 2);
     }
 
@@ -117,10 +126,19 @@ mod tests {
         let mut m = Monitor::new(Ok(Config::default()));
         let t0 = Instant::now();
         let mut calls = 0;
-        m.tick(&ok_snap(), t0, || { calls += 1; vec![] });
-        m.tick(&ok_snap(), t0 + Duration::from_secs(5), || { calls += 1; vec![] });
+        m.tick(&ok_snap(), t0, || {
+            calls += 1;
+            vec![]
+        });
+        m.tick(&ok_snap(), t0 + Duration::from_secs(5), || {
+            calls += 1;
+            vec![]
+        });
         assert_eq!(calls, 1);
-        m.tick(&ok_snap(), t0 + Duration::from_millis(9_999), || { calls += 1; vec![] });
+        m.tick(&ok_snap(), t0 + Duration::from_millis(9_999), || {
+            calls += 1;
+            vec![]
+        });
         assert_eq!(calls, 2);
     }
 
@@ -129,9 +147,15 @@ mod tests {
         let mut m = Monitor::new(Ok(Config::default()));
         let t0 = Instant::now();
         let mut calls = 0;
-        m.tick(&ok_snap(), t0, || { calls += 1; vec![] });
+        m.tick(&ok_snap(), t0, || {
+            calls += 1;
+            vec![]
+        });
         m.set_config(Ok(Config::default()));
-        m.tick(&ok_snap(), t0 + Duration::from_secs(1), || { calls += 1; vec![] });
+        m.tick(&ok_snap(), t0 + Duration::from_secs(1), || {
+            calls += 1;
+            vec![]
+        });
         assert_eq!(calls, 2);
     }
 
@@ -143,17 +167,34 @@ mod tests {
 
     #[test]
     fn set_config_err_keeps_old_and_sets_error() {
-        let c = Config { culprits_count: 3, ..Config::default() };
+        let c = Config {
+            culprits_count: 3,
+            ..Config::default()
+        };
         let mut m = Monitor::new(Ok(c.clone()));
         m.set_config(Err(ConfigError::Parse("boom".into())));
         assert_eq!(m.config(), &c);
-        assert_eq!(m.tick(&ok_snap(), Instant::now(), Vec::new).menu.config_error.as_deref(), Some("boom"));
+        assert_eq!(
+            m.tick(&ok_snap(), Instant::now(), Vec::new)
+                .menu
+                .config_error
+                .as_deref(),
+            Some("boom")
+        );
         m.set_config(Ok(Config::default()));
-        assert_eq!(m.tick(&ok_snap(), Instant::now(), Vec::new).menu.config_error, None);
+        assert_eq!(
+            m.tick(&ok_snap(), Instant::now(), Vec::new)
+                .menu
+                .config_error,
+            None
+        );
     }
 
     #[test]
     fn new_with_err_uses_defaults() {
-        assert_eq!(Monitor::new(Err(ConfigError::Io("x".into()))).config(), &Config::default());
+        assert_eq!(
+            Monitor::new(Err(ConfigError::Io("x".into()))).config(),
+            &Config::default()
+        );
     }
 }

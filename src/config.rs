@@ -55,19 +55,29 @@ impl Default for Config {
 
 impl Default for DiskConfig {
     fn default() -> Self {
-        DiskConfig { warn_free_gb: 25.0, crit_free_gb: 10.0 }
+        DiskConfig {
+            warn_free_gb: 25.0,
+            crit_free_gb: 10.0,
+        }
     }
 }
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        MemoryConfig { warn_available_pct: 15.0, crit_available_pct: 7.0, use_pressure_level: true }
+        MemoryConfig {
+            warn_available_pct: 15.0,
+            crit_available_pct: 7.0,
+            use_pressure_level: true,
+        }
     }
 }
 
 impl Default for SwapConfig {
     fn default() -> Self {
-        SwapConfig { warn_used_gb: 4.0, crit_used_gb: 10.0 }
+        SwapConfig {
+            warn_used_gb: 4.0,
+            crit_used_gb: 10.0,
+        }
     }
 }
 
@@ -117,7 +127,10 @@ pub fn validate(c: &Config) -> Result<(), ConfigError> {
         return invalid("[disk] requires 0 < crit_free_gb < warn_free_gb");
     }
     let m = &c.memory;
-    if !(0.0 < m.crit_available_pct && m.crit_available_pct < m.warn_available_pct && m.warn_available_pct < 100.0) {
+    if !(0.0 < m.crit_available_pct
+        && m.crit_available_pct < m.warn_available_pct
+        && m.warn_available_pct < 100.0)
+    {
         return invalid("[memory] requires 0 < crit_available_pct < warn_available_pct < 100");
     }
     let s = &c.swap;
@@ -167,8 +180,12 @@ crit_used_gb = 10
 
 /// `$HOME/.config/mac-health-monitor/config.toml`.
 pub fn config_path() -> PathBuf {
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-    home.join(".config").join("mac-health-monitor").join("config.toml")
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    home.join(".config")
+        .join("mac-health-monitor")
+        .join("config.toml")
 }
 
 /// Load the config at `path`, creating it with commented defaults when missing.
@@ -188,26 +205,57 @@ pub fn load_or_create(path: &Path) -> Result<Config, ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn defaults_match_spec() {
+    #[test]
+    fn defaults_match_spec() {
         let c = Config::default();
-        assert_eq!((c.refresh_secs, c.culprits_refresh_secs, c.culprits_count), (5, 10, 8));
+        assert_eq!(
+            (c.refresh_secs, c.culprits_refresh_secs, c.culprits_count),
+            (5, 10, 8)
+        );
         assert_eq!(c.hysteresis_margin_pct, 5.0);
         assert_eq!((c.disk.warn_free_gb, c.disk.crit_free_gb), (25.0, 10.0));
-        assert_eq!((c.memory.warn_available_pct, c.memory.crit_available_pct, c.memory.use_pressure_level), (15.0, 7.0, true));
+        assert_eq!(
+            (
+                c.memory.warn_available_pct,
+                c.memory.crit_available_pct,
+                c.memory.use_pressure_level
+            ),
+            (15.0, 7.0, true)
+        );
         assert_eq!((c.swap.warn_used_gb, c.swap.crit_used_gb), (4.0, 10.0));
     }
-    #[test] fn default_toml_parses_to_default() { assert_eq!(parse(default_toml()).unwrap(), Config::default()); }
-    #[test] fn partial_file_fills_defaults() {
-        let c = parse("[swap]\nwarn_used_gb = 6\n").unwrap();
-        assert_eq!(c.swap.warn_used_gb, 6.0); assert_eq!(c.swap.crit_used_gb, 10.0); assert_eq!(c.refresh_secs, 5);
+    #[test]
+    fn default_toml_parses_to_default() {
+        assert_eq!(parse(default_toml()).unwrap(), Config::default());
     }
-    #[test] fn parse_rejects_unknown_key() { assert!(matches!(parse("refresh_sec = 5"), Err(ConfigError::Parse(_)))); }
-    #[test] fn parse_rejects_crit_above_warn() {
+    #[test]
+    fn partial_file_fills_defaults() {
+        let c = parse("[swap]\nwarn_used_gb = 6\n").unwrap();
+        assert_eq!(c.swap.warn_used_gb, 6.0);
+        assert_eq!(c.swap.crit_used_gb, 10.0);
+        assert_eq!(c.refresh_secs, 5);
+    }
+    #[test]
+    fn parse_rejects_unknown_key() {
+        assert!(matches!(
+            parse("refresh_sec = 5"),
+            Err(ConfigError::Parse(_))
+        ));
+    }
+    #[test]
+    fn parse_rejects_crit_above_warn() {
         let e = parse("[disk]\nwarn_free_gb = 10\ncrit_free_gb = 20\n").unwrap_err();
         assert!(matches!(&e, ConfigError::Invalid(m) if m.contains("disk")));
     }
-    #[test] fn parse_rejects_zero_refresh() { assert!(matches!(parse("refresh_secs = 0"), Err(ConfigError::Invalid(_)))); }
-    #[test] fn load_or_create_writes_defaults() {
+    #[test]
+    fn parse_rejects_zero_refresh() {
+        assert!(matches!(
+            parse("refresh_secs = 0"),
+            Err(ConfigError::Invalid(_))
+        ));
+    }
+    #[test]
+    fn load_or_create_writes_defaults() {
         let dir = std::env::temp_dir().join(format!("mhm-test-{}", std::process::id()));
         let p = dir.join("nested/config.toml");
         let _ = std::fs::remove_dir_all(&dir);

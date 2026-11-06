@@ -48,19 +48,33 @@ mod tests {
 
     #[test]
     fn available_bytes_sums_reclaimable() {
-        let p = VmPages { free: 1, inactive: 2, purgeable: 3, speculative: 4, compressor: 100 };
+        let p = VmPages {
+            free: 1,
+            inactive: 2,
+            purgeable: 3,
+            speculative: 4,
+            compressor: 100,
+        };
         assert_eq!(available_bytes(&p, 16384), 10 * 16384);
     }
 
     #[test]
     fn available_pct_zero_total() {
-        let s = Snapshot { mem_total_bytes: 0, mem_available_bytes: 0, ..Default::default() };
+        let s = Snapshot {
+            mem_total_bytes: 0,
+            mem_available_bytes: 0,
+            ..Default::default()
+        };
         assert_eq!(s.available_pct(), 100.0);
     }
 
     #[test]
     fn available_pct_normal() {
-        let s = Snapshot { mem_total_bytes: 200, mem_available_bytes: 30, ..Default::default() };
+        let s = Snapshot {
+            mem_total_bytes: 200,
+            mem_available_bytes: 30,
+            ..Default::default()
+        };
         assert_eq!(s.available_pct(), 15.0);
     }
 

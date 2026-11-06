@@ -30,10 +30,16 @@ fn sysctl_by_name<T: Copy>(name: &str) -> Result<T, String> {
         )
     };
     if rc != 0 {
-        return Err(format!("sysctlbyname({name}) failed: {}", std::io::Error::last_os_error()));
+        return Err(format!(
+            "sysctlbyname({name}) failed: {}",
+            std::io::Error::last_os_error()
+        ));
     }
     if len != size_of::<T>() {
-        return Err(format!("sysctlbyname({name}) returned {len} bytes, expected {}", size_of::<T>()));
+        return Err(format!(
+            "sysctlbyname({name}) returned {len} bytes, expected {}",
+            size_of::<T>()
+        ));
     }
     // SAFETY: the kernel wrote all `size_of::<T>()` bytes (checked above) and the buffer was
     // zero-initialised; T is a plain-data type (Copy).
@@ -61,7 +67,10 @@ fn vm_stats() -> Result<libc::vm_statistics64, String> {
     Ok(unsafe { stats.assume_init() })
 }
 
-fn number_for(dict: &objc2_foundation::NSDictionary<NSString, AnyObject>, key: &NSString) -> Option<u64> {
+fn number_for(
+    dict: &objc2_foundation::NSDictionary<NSString, AnyObject>,
+    key: &NSString,
+) -> Option<u64> {
     let obj = dict.objectForKey(key)?;
     let n = obj.downcast_ref::<NSNumber>()?;
     Some(n.unsignedLongLongValue())
@@ -72,7 +81,10 @@ fn disk_nsurl() -> Option<(u64, u64)> {
     let url: Retained<NSURL> = NSURL::fileURLWithPath(&NSString::from_str("/"));
     // SAFETY: both statics are valid NSURLResourceKey (NSString) constants provided by Foundation.
     let (free_key, total_key) = unsafe {
-        (NSURLVolumeAvailableCapacityForImportantUsageKey, NSURLVolumeTotalCapacityKey)
+        (
+            NSURLVolumeAvailableCapacityForImportantUsageKey,
+            NSURLVolumeTotalCapacityKey,
+        )
     };
     let keys = NSArray::from_slice(&[free_key, total_key]);
     let values = url.resourceValuesForKeys_error(&keys).ok()?;
@@ -87,7 +99,10 @@ fn disk_statfs() -> Result<(u64, u64), String> {
     // SAFETY: the path is a NUL-terminated literal and `st` is a writable statfs buffer.
     let rc = unsafe { libc::statfs(c"/".as_ptr(), st.as_mut_ptr()) };
     if rc != 0 {
-        return Err(format!("statfs(/) failed: {}", std::io::Error::last_os_error()));
+        return Err(format!(
+            "statfs(/) failed: {}",
+            std::io::Error::last_os_error()
+        ));
     }
     // SAFETY: statfs succeeded, so the structure has been filled in.
     let st = unsafe { st.assume_init() };
