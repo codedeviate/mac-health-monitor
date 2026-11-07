@@ -114,3 +114,7 @@ cargo clippy --all-targets -- -D warnings
 ## Out of scope and roadmap
 
 See [OUT-OF-SCOPE.md](OUT-OF-SCOPE.md) for what is deliberately not done and the wishlist.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
