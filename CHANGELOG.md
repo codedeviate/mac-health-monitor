@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - MIT license file
 
+### Fixed
+
+- Colored status dots now actually appear next to each parameter in the menu. Recent macOS releases do not draw menu item images, so the dot is now part of the row text, where it keeps full color on the display-only rows
+
 ## [0.1.0] - 2026-11-06
 
 ### Added

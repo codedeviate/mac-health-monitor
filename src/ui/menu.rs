@@ -4,10 +4,13 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2::{AnyThread, MainThreadMarker, MainThreadOnly, sel};
 use objc2_app_kit::{
-    NSApp, NSFont, NSFontAttributeName, NSMenu, NSMenuItem, NSMutableParagraphStyle,
-    NSParagraphStyleAttributeName, NSTextAlignment, NSTextTab,
+    NSApp, NSAttributedStringAttachmentConveniences, NSFont, NSFontAttributeName, NSMenu,
+    NSMenuItem, NSMutableParagraphStyle, NSParagraphStyleAttributeName, NSTextAlignment,
+    NSTextAttachment, NSTextTab,
 };
-use objc2_foundation::{NSArray, NSAttributedString, NSDictionary, NSString, ns_string};
+use objc2_foundation::{
+    NSArray, NSAttributedString, NSDictionary, NSMutableCopying, NSRange, NSString, ns_string,
+};
 
 use super::icons::dot_image;
 use crate::menu_model::{MenuModel, Row};
@@ -38,7 +41,11 @@ fn disabled_item(mtm: MainThreadMarker, title: &str) -> Retained<NSMenuItem> {
     it
 }
 
-/// "{label}\t{value}" with the value right-aligned at `VALUE_TAB_LOCATION`.
+/// "[dot]  {label}\t{value}" with the value right-aligned at `VALUE_TAB_LOCATION`.
+///
+/// The status dot is a text attachment rather than `NSMenuItem.image`: recent macOS releases
+/// do not draw item images in this menu at all, and an attachment also keeps its full color
+/// on disabled (display-only) rows, where an item image would be dimmed.
 fn aligned_title(row: &Row) -> Retained<NSAttributedString> {
     // SAFETY: an empty options dictionary is valid for NSTextTab.
     let tab = unsafe {
@@ -56,16 +63,34 @@ fn aligned_title(row: &Row) -> Retained<NSAttributedString> {
     let keys = unsafe { [NSFontAttributeName, NSParagraphStyleAttributeName] };
     let values: [&AnyObject; 2] = [font.as_ref(), style.as_ref()];
     let attrs = NSDictionary::from_slices(&keys, &values);
-    let text = NSString::from_str(&format!("{}\t{}", row.label, row.value));
+    let dot = dot_image(row.indicator);
+    let prefix = if dot.is_some() { "  " } else { "" };
+    let text = NSString::from_str(&format!("{prefix}{}\t{}", row.label, row.value));
     // SAFETY: NSFont for the font key and NSParagraphStyle for the paragraph style key are
     // the value types AppKit expects.
-    unsafe { NSAttributedString::new_with_attributes(&text, &attrs) }
+    let body = unsafe { NSAttributedString::new_with_attributes(&text, &attrs) };
+    let Some(dot) = dot else {
+        return body;
+    };
+    let attachment = NSTextAttachment::new();
+    attachment.setImage(Some(&dot));
+    let title = NSAttributedString::attributedStringWithAttachment(&attachment).mutableCopy();
+    title.appendAttributedString(&body);
+    // The paragraph style (tab stop) must cover the whole string, attachment included.
+    // SAFETY: as above; the range spans the string just built.
+    unsafe {
+        title.addAttribute_value_range(
+            NSParagraphStyleAttributeName,
+            &style,
+            NSRange::new(0, title.length()),
+        )
+    };
+    title.into_super()
 }
 
 fn row_item(mtm: MainThreadMarker, row: &Row) -> Retained<NSMenuItem> {
     let it = disabled_item(mtm, "");
     it.setAttributedTitle(Some(&aligned_title(row)));
-    it.setImage(dot_image(row.indicator).as_deref());
     it
 }
 
