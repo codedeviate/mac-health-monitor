@@ -7,6 +7,7 @@ pub mod menu_model;
 pub mod metrics;
 pub mod monitor;
 pub mod processes;
+pub mod report;
 pub mod status;
 pub mod ui;
 pub mod units;

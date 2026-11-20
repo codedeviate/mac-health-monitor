@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - History recorder: one sample per minute to `~/Library/Logs/mac-health-monitor/history.jsonl`, kept 24 h, synced to disk so it survives a crash
 - Parsers for macOS kernel panic, watchdog, memory-pressure (Jetsam) and reset reports
 - Discovery of recent incident reports in `/Library/Logs/DiagnosticReports`; unreadable files become notes, never errors
+- Plain-language findings ("What this suggests") derived from incidents, current state and history
 
 ## [0.1.1] - 2026-11-07
 
