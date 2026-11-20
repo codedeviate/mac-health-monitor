@@ -13,7 +13,7 @@ use objc2_foundation::{
 };
 
 use super::icons::dot_image;
-use crate::menu_model::{MenuModel, Row};
+use crate::menu_model::{MenuModel, ReportState, Row};
 
 /// Location of the right-aligned tab stop that lines up the values.
 const VALUE_TAB_LOCATION: f64 = 300.0;
@@ -94,13 +94,20 @@ fn row_item(mtm: MainThreadMarker, row: &Row) -> Retained<NSMenuItem> {
     it
 }
 
-/// Replaces the contents of `menu` with `model`. The config items target `target`,
-/// which must implement `openConfig:` and `reloadConfig:`.
+/// Replaces the contents of `menu` with `model`. The crash, report and config items target
+/// `target`, which must implement `healthReport:`, `openConfig:` and `reloadConfig:`.
 pub fn render(menu: &NSMenu, model: &MenuModel, target: &AnyObject) {
     let mtm = menu.mtm();
     menu.setAutoenablesItems(false);
     menu.removeAllItems();
 
+    if let Some(line) = &model.crash {
+        let crash = item(mtm, line, Some(sel!(healthReport:)), ns_string!(""));
+        // SAFETY: `target` implements healthReport: (caller contract) and outlives the menu.
+        unsafe { crash.setTarget(Some(target)) };
+        menu.addItem(&crash);
+        menu.addItem(&NSMenuItem::separatorItem(mtm));
+    }
     if let Some(msg) = &model.config_error {
         menu.addItem(&disabled_item(mtm, &format!("⚠ config error: {msg}")));
         menu.addItem(&NSMenuItem::separatorItem(mtm));
@@ -118,6 +125,23 @@ pub fn render(menu: &NSMenu, model: &MenuModel, target: &AnyObject) {
     }
 
     menu.addItem(&NSMenuItem::separatorItem(mtm));
+    if let ReportState::Failed(msg) = &model.report {
+        menu.addItem(&disabled_item(mtm, &format!("⚠ report failed: {msg}")));
+    }
+    let report = if model.report == ReportState::Busy {
+        disabled_item(mtm, "Generating health report…")
+    } else {
+        let it = item(
+            mtm,
+            "Health report…",
+            Some(sel!(healthReport:)),
+            ns_string!(""),
+        );
+        // SAFETY: as for the crash line above.
+        unsafe { it.setTarget(Some(target)) };
+        it
+    };
+    menu.addItem(&report);
     let open = item(mtm, "Open config…", Some(sel!(openConfig:)), ns_string!(""));
     let reload = item(
         mtm,

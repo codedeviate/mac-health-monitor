@@ -19,11 +19,24 @@ pub struct Row {
     pub value: String,
 }
 
+/// State of the "Health report…" menu item.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum ReportState {
+    #[default]
+    Idle,
+    Busy,
+    Failed(String),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct MenuModel {
     pub params: Vec<Row>,
     pub culprits: Vec<Row>,
     pub config_error: Option<String>,
+    /// Crash line text; filled in by the UI, not by `build`.
+    pub crash: Option<String>,
+    /// Filled in by the UI, not by `build`.
+    pub report: ReportState,
 }
 
 /// Decimal gigabytes with one decimal place, e.g. `142.3 GB`.
@@ -111,6 +124,8 @@ pub fn build(
         params,
         culprits,
         config_error: config_error.map(str::to_string),
+        crash: None,
+        report: ReportState::Idle,
     }
 }
 
@@ -176,6 +191,12 @@ mod tests {
             build(&s, &fixture_eval(), &[], None).params[3].value,
             "0.0 GB of 0.0 GB"
         );
+    }
+    #[test]
+    fn build_defaults_report_state() {
+        let m = build(&fixture_snapshot(), &fixture_eval(), &[], None);
+        assert_eq!(m.crash, None);
+        assert_eq!(m.report, ReportState::Idle);
     }
     #[test]
     fn culprit_count_suffix() {
