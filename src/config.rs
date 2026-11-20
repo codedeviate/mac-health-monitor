@@ -15,6 +15,8 @@ pub struct Config {
     pub disk: DiskConfig,
     pub memory: MemoryConfig,
     pub swap: SwapConfig,
+    pub history: HistoryConfig,
+    pub report: ReportConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -39,6 +41,20 @@ pub struct SwapConfig {
     pub crit_used_gb: f64,
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct HistoryConfig {
+    pub interval_secs: u64,
+    pub retain_hours: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ReportConfig {
+    pub incident_days: u64,
+    pub keep_reports: usize,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -49,6 +65,8 @@ impl Default for Config {
             disk: DiskConfig::default(),
             memory: MemoryConfig::default(),
             swap: SwapConfig::default(),
+            history: HistoryConfig::default(),
+            report: ReportConfig::default(),
         }
     }
 }
@@ -77,6 +95,24 @@ impl Default for SwapConfig {
         SwapConfig {
             warn_used_gb: 4.0,
             crit_used_gb: 10.0,
+        }
+    }
+}
+
+impl Default for HistoryConfig {
+    fn default() -> Self {
+        HistoryConfig {
+            interval_secs: 60,
+            retain_hours: 24,
+        }
+    }
+}
+
+impl Default for ReportConfig {
+    fn default() -> Self {
+        ReportConfig {
+            incident_days: 7,
+            keep_reports: 20,
         }
     }
 }
@@ -137,6 +173,20 @@ pub fn validate(c: &Config) -> Result<(), ConfigError> {
     if !(0.0 < s.warn_used_gb && s.warn_used_gb < s.crit_used_gb) {
         return invalid("[swap] requires 0 < warn_used_gb < crit_used_gb");
     }
+    let h = &c.history;
+    if h.interval_secs < 10 {
+        return invalid("[history] interval_secs must be >= 10");
+    }
+    if !(1..=168).contains(&h.retain_hours) {
+        return invalid("[history] retain_hours must be between 1 and 168");
+    }
+    let r = &c.report;
+    if !(1..=30).contains(&r.incident_days) {
+        return invalid("[report] incident_days must be between 1 and 30");
+    }
+    if !(1..=500).contains(&r.keep_reports) {
+        return invalid("[report] keep_reports must be between 1 and 500");
+    }
     Ok(())
 }
 
@@ -175,6 +225,20 @@ use_pressure_level = true
 # Swap in use, in binary GiB. Yellow above warn, red above crit.
 warn_used_gb = 4
 crit_used_gb = 10
+
+[history]
+# The monitor appends a small sample of its readings to a history file so a health
+# report can show what led up to an incident.
+# Seconds between samples (>= 10).
+interval_secs = 60
+# Hours of history to keep (1-168).
+retain_hours = 24
+
+[report]
+# How many days of crash and memory-pressure incidents a health report covers (1-30).
+incident_days = 7
+# How many saved health reports to keep; the oldest are removed beyond this (1-500).
+keep_reports = 20
 "#
 }
 
@@ -253,6 +317,49 @@ mod tests {
             parse("refresh_secs = 0"),
             Err(ConfigError::Invalid(_))
         ));
+    }
+    #[test]
+    fn defaults_for_new_tables() {
+        let c = Config::default();
+        assert_eq!(
+            c.history,
+            HistoryConfig {
+                interval_secs: 60,
+                retain_hours: 24
+            }
+        );
+        assert_eq!(
+            c.report,
+            ReportConfig {
+                incident_days: 7,
+                keep_reports: 20
+            }
+        );
+    }
+    #[test]
+    fn old_config_without_new_tables_loads() {
+        let full = default_toml();
+        let old = &full[..full.find("[history]").unwrap()];
+        assert!(!old.contains("[report]"));
+        let c = parse(old).unwrap();
+        assert_eq!(c, Config::default());
+    }
+    #[test]
+    fn parse_rejects_bad_history_and_report() {
+        for bad in [
+            "[history]\ninterval_secs = 5\n",
+            "[history]\nretain_hours = 0\n",
+            "[history]\nretain_hours = 169\n",
+            "[report]\nincident_days = 0\n",
+            "[report]\nincident_days = 31\n",
+            "[report]\nkeep_reports = 0\n",
+            "[report]\nkeep_reports = 501\n",
+        ] {
+            assert!(
+                matches!(parse(bad), Err(ConfigError::Invalid(_))),
+                "should reject: {bad}"
+            );
+        }
     }
     #[test]
     fn load_or_create_writes_defaults() {
