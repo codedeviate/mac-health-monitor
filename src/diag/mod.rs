@@ -8,6 +8,8 @@ use serde::Deserialize;
 
 use crate::clock::parse_apple_date;
 
+pub mod scan;
+
 /// One diagnostic incident, parsed from a report file.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Incident {
