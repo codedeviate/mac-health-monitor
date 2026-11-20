@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Discovery of recent incident reports in `/Library/Logs/DiagnosticReports`; unreadable files become notes, never errors
 - Plain-language findings ("What this suggests") derived from incidents, current state and history
 - Markdown health report: findings, incidents, history timeline, current state and sources
+- Health report generation (kept: newest 20) and detection of crash-caused reboots
 
 ## [0.1.1] - 2026-11-07
 
