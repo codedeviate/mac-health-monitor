@@ -6,9 +6,10 @@ something. Click the icon for the numbers and the apps most likely responsible.
 
 It is a menu-bar-only agent: no Dock icon and no windows. Requires macOS 13 or later.
 
-The app is light. Its own memory is about 14 MB physical footprint (the figure
-Activity Monitor shows). `ps` reports an RSS of around 70 MB because it also counts
-AppKit's shared system libraries, which are not really the app's own memory.
+The app is light. Its own memory is about 17 MB physical footprint when idle (the
+figure Activity Monitor shows), with a brief peak of about 37 MB at startup.
+Generating a health report temporarily adds up to about 26 MB while it runs. `ps`
+reports an RSS of around 27 MB for the idle app.
 
 ## What it shows
 
@@ -52,7 +53,8 @@ While it runs, the app records one small sample of its readings per minute so th
 report can show what led up to an incident.
 
 **Where things are stored.** History and reports live in
-`~/Library/Logs/mac-health-monitor/` (`history.jsonl` and `reports/`). The newest
+`~/Library/Logs/mac-health-monitor/` (`history.jsonl` and `reports/`), plus `state.json`, which remembers which crash
+you have already seen. The newest
 `keep_reports` reports are kept.
 
 **Crash line.** After a reboot caused by a crash, the menu shows a

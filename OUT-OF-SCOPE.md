@@ -1,14 +1,14 @@
 # Out of scope and roadmap
 
-## Out of scope (v0.1)
+## Out of scope
 
-- **Killing or quitting processes from the menu.** v0.1 is read-only display; acting on processes is risky and is deferred.
-- **Desktop notifications when something turns red.** Keeps v0.1 to the menu-bar icon alone.
+- **Killing or quitting processes from the menu.** The menu is read-only display; acting on processes is risky and is deferred.
+- **Desktop notifications when something turns red.** Status is shown by the menu-bar icon alone.
 - **History graphs or trends.** History is now recorded and shown as a text timeline in the health report (v0.2.0); graphs are still out of scope.
-- **CPU, thermal, battery or network monitoring.** v0.1 is limited to disk, memory and swap.
-- **A preferences GUI.** Configuration is a plain text file in v0.1.
-- **Code signing, notarization or distribution beyond the user's own machine.** v0.1 is built for personal use.
-- **Monitoring volumes other than the boot volume.** v0.1 watches only the boot volume.
+- **CPU, thermal, battery or network monitoring.** The app is limited to disk, memory and swap.
+- **A preferences GUI.** Configuration is a plain text file today.
+- **Code signing, notarization or distribution beyond the user's own machine.** The app is built for personal use.
+- **Monitoring volumes other than the boot volume.** The app watches only the boot volume.
 
 ## Wishlist / roadmap
 
