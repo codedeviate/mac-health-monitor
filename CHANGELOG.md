@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Configuration for the history recorder and health report (`[history]`, `[report]`)
+- Local-time formatting and boot-time lookup for reports
 
 ## [0.1.1] - 2026-11-07
 

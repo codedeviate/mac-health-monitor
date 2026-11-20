@@ -1,3 +1,4 @@
+pub mod clock;
 pub mod config;
 pub mod eval;
 pub mod menu_model;
