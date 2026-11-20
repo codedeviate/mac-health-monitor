@@ -110,7 +110,7 @@ pub fn parse_apple_date(s: &str) -> Option<i64> {
         _ => return None,
     };
     let digits = &off[1..];
-    if digits.len() != 4 {
+    if digits.len() != 4 || !digits.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
     let off_secs = sign * (num(&digits[..2])? * 3600 + num(&digits[2..])? * 60);
@@ -227,6 +227,7 @@ mod tests {
             Some(parse_apple_date("2026-11-19 13:57:50 +0000").unwrap())
         );
         assert_eq!(parse_apple_date("garbage"), None);
+        assert_eq!(parse_apple_date("2026-11-19 08:52:29 +aéa"), None);
     }
 
     #[test]
