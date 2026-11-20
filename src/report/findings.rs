@@ -175,7 +175,7 @@ fn rule_panics(input: &ReportInput) -> Vec<String> {
         .collect()
 }
 
-/// Rule 2: a watchdog timeout that no panic followed.
+/// Rule 2: a watchdog timeout not already explained by a panic right after it.
 fn rule_watchdogs(input: &ReportInput) -> Vec<String> {
     watchdogs(input)
         .filter(|w| {
@@ -190,7 +190,7 @@ fn rule_watchdogs(input: &ReportInput) -> Vec<String> {
                 .map(|s| format!(" for {s} s"))
                 .unwrap_or_default();
             format!(
-                "{who} was unresponsive{dur} at {} (watchdog timeout; no kernel panic followed).",
+                "{who} was unresponsive{dur} at {} (watchdog timeout).",
                 when(w.time, input.now)
             )
         })
@@ -507,7 +507,7 @@ fn latest_jetsam(input: &ReportInput) -> Option<&Jetsam> {
     jetsams(input).max_by_key(|j| j.time)
 }
 
-fn low_swap(j: &Jetsam) -> usize {
+pub(super) fn low_swap(j: &Jetsam) -> usize {
     j.kills.get(LOW_SWAP).copied().unwrap_or(0)
 }
 
@@ -758,6 +758,8 @@ mod tests {
         i.incidents = vec![w.clone()];
         let f = joined(&i);
         assert!(f.contains("configd was unresponsive"), "{f}");
+        assert!(f.contains("(watchdog timeout)."), "{f}");
+        assert!(!f.contains("no kernel panic followed"), "{f}");
 
         // A panic shortly after means the watchdog is part of that panic.
         i.incidents = vec![w, panic(NOW - 700, WATCHDOG_LINE, Some("WindowServer"))];

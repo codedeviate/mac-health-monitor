@@ -48,6 +48,9 @@ const LOG_DIR: &str = "Library/Logs/mac-health-monitor";
 const REPORT_PREFIX: &str = "health-report-";
 /// Window, in seconds, around the boot time in which a crash counts for the menu line.
 const CRASH_WINDOW_SECS: i64 = 900;
+/// Crash detection is retried this long after boot, while the panic report may still be written.
+const CRASH_RECHECK_UNTIL_SECS: i64 = CRASH_WINDOW_SECS + 300;
+const CRASH_RECHECK_EVERY_SECS: i64 = 60;
 
 fn log_dir() -> PathBuf {
     std::env::var_os("HOME")
@@ -210,6 +213,30 @@ pub fn detect_crash(incidents: &[Incident], boot_time: i64) -> Option<Crash> {
     })
 }
 
+/// Whether the app should (re)run crash detection now. The first check runs at launch; after
+/// that it is retried once a minute while the boot is recent, because at login the panic report
+/// may still be missing or half-written. Never while a check runs or once a crash is known.
+pub fn should_check_crash(
+    now: i64,
+    boot: Option<i64>,
+    last_check: Option<i64>,
+    crash_known: bool,
+    check_running: bool,
+) -> bool {
+    if crash_known || check_running {
+        return false;
+    }
+    let Some(last) = last_check else {
+        return true;
+    };
+    let Some(boot) = boot else {
+        return false;
+    };
+    // A clock that jumped backwards (now < last) makes it due.
+    let due = !(0..CRASH_RECHECK_EVERY_SECS).contains(&now.saturating_sub(last));
+    due && now.saturating_sub(boot) <= CRASH_RECHECK_UNTIL_SECS
+}
+
 /// The unacknowledged crash behind the current boot, if it is still within the report window.
 pub fn startup_crash(config: &Config) -> Option<Crash> {
     let boot = boot_time()?;
@@ -325,6 +352,49 @@ mod tests {
             BOOT,
         );
         assert_eq!(c.map(|c| c.kind), Some(CrashKind::Panic));
+    }
+
+    #[test]
+    fn detect_boundaries() {
+        let some = |i: Incident| detect_crash(&[i], BOOT).is_some();
+        // An exact panic time after boot belongs to a later crash, not this boot.
+        assert!(!some(panic_at(BOOT + 60, true)));
+        // An inexact time is a file time, written after the reboot.
+        assert!(!some(panic_at(BOOT - 60, false)));
+        assert!(some(panic_at(BOOT - 900, true)));
+        assert!(!some(panic_at(BOOT - 901, true)));
+        assert!(some(panic_at(BOOT + 900, false)));
+        assert!(!some(panic_at(BOOT + 901, false)));
+        assert!(!some(reset_at(BOOT - 60, "wdog")));
+    }
+
+    #[test]
+    fn crash_check_due() {
+        let boot = Some(BOOT);
+        let due = |now, last, known, running| should_check_crash(now, boot, last, known, running);
+        // First check at launch, even long after boot.
+        assert!(due(BOOT + 30, None, false, false));
+        assert!(due(BOOT + 86_400, None, false, false));
+        // Retried once a minute while the boot is recent.
+        assert!(!due(BOOT + 89, Some(BOOT + 30), false, false));
+        assert!(due(BOOT + 90, Some(BOOT + 30), false, false));
+        assert!(due(BOOT + 1200, Some(BOOT + 1100), false, false));
+        assert!(!due(BOOT + 1201, Some(BOOT + 1100), false, false));
+        // Not while one runs or once a crash is known.
+        assert!(!due(BOOT + 90, Some(BOOT + 30), false, true));
+        assert!(!due(BOOT + 90, Some(BOOT + 30), true, false));
+        assert!(!due(BOOT + 30, None, false, true));
+        // A clock that jumped back makes it due.
+        assert!(due(BOOT + 100, Some(BOOT + 500), false, false));
+        // Without a boot time only the launch check runs.
+        assert!(should_check_crash(BOOT, None, None, false, false));
+        assert!(!should_check_crash(
+            BOOT + 90,
+            None,
+            Some(BOOT),
+            false,
+            false
+        ));
     }
 
     #[test]

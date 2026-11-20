@@ -13,7 +13,7 @@ use objc2_foundation::{
 };
 
 use super::icons::dot_image;
-use crate::menu_model::{MenuModel, ReportState, Row};
+use crate::menu_model::{MenuModel, ReportState, Row, report_failed_line};
 
 /// Location of the right-aligned tab stop that lines up the values.
 const VALUE_TAB_LOCATION: f64 = 300.0;
@@ -126,7 +126,7 @@ pub fn render(menu: &NSMenu, model: &MenuModel, target: &AnyObject) {
 
     menu.addItem(&NSMenuItem::separatorItem(mtm));
     if let ReportState::Failed(msg) = &model.report {
-        menu.addItem(&disabled_item(mtm, &format!("⚠ report failed: {msg}")));
+        menu.addItem(&disabled_item(mtm, &report_failed_line(msg)));
     }
     let report = if model.report == ReportState::Busy {
         disabled_item(mtm, "Generating health report…")

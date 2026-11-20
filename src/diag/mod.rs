@@ -139,7 +139,12 @@ pub fn parse_panic(text: &str, file_time: i64) -> Result<Panic, String> {
         serde_json::from_str(body).map_err(|e| format!("panic body is not valid JSON: {e}"))?;
     let panic_string = body.panic_string.ok_or("panic body has no panicString")?;
 
-    let wall = body.panic_time.as_deref().and_then(parse_wall);
+    // `wall 0 s` means the kernel had no time to record.
+    let wall = body
+        .panic_time
+        .as_deref()
+        .and_then(parse_wall)
+        .filter(|t| *t > 0);
     let (time, time_is_exact) = match wall.or_else(|| parse_calendar(&panic_string)) {
         Some(t) => (t, true),
         None => (file_time, false),
@@ -389,6 +394,17 @@ mod tests {
         let p = parse_panic(&fixtures::panic_text(None, &s), 5).unwrap();
         assert_eq!(p.time, 0x6afeaba2);
         assert!(p.time_is_exact);
+    }
+
+    #[test]
+    fn parse_panic_wall_zero_is_not_a_time() {
+        let s = format!("{PANIC_LINE}\n  Calendar: 0x6afeaba2 0x000da462\n");
+        let p = parse_panic(&fixtures::panic_text(Some("wall 0 s 0 us"), &s), 5).unwrap();
+        assert_eq!(p.time, 0x6afeaba2);
+        assert!(p.time_is_exact);
+        let p = parse_panic(&fixtures::panic_text(Some("wall 0 s 0 us"), PANIC_LINE), 42).unwrap();
+        assert_eq!(p.time, 42);
+        assert!(!p.time_is_exact);
     }
 
     #[test]

@@ -164,8 +164,9 @@ impl Recorder {
         cfg: &HistoryConfig,
     ) -> std::io::Result<bool> {
         let interval = i64::try_from(cfg.interval_secs).unwrap_or(i64::MAX);
+        // A clock that jumped backwards (now < last) makes both due again.
         if let Some(last) = self.last_write
-            && now.saturating_sub(last) < interval
+            && (0..interval).contains(&now.saturating_sub(last))
         {
             return Ok(false);
         }
@@ -174,7 +175,7 @@ impl Recorder {
         }
         if self
             .last_trim
-            .is_none_or(|t| now.saturating_sub(t) >= TRIM_EVERY_SECS)
+            .is_none_or(|t| now < t || now.saturating_sub(t) >= TRIM_EVERY_SECS)
         {
             self.last_trim = Some(now);
             // Trimming is housekeeping; a failure must not block recording.
@@ -275,6 +276,21 @@ mod tests {
             .collect();
         assert_eq!(got, vec![true, false, true]);
         assert_eq!(fs::read_to_string(&path).unwrap().lines().count(), 2);
+    }
+
+    #[test]
+    fn recorder_writes_after_clock_jumps_back() {
+        let d = tmp_dir("clock-back");
+        let path = d.join("history.jsonl");
+        let cfg = HistoryConfig {
+            interval_secs: 60,
+            retain_hours: 24,
+        };
+        let mut r = Recorder::new(path.clone());
+        assert!(r.observe(1000, || sample(1000), &cfg).unwrap());
+        assert!(r.observe(500, || sample(500), &cfg).unwrap());
+        assert_eq!(r.last_trim, Some(500));
+        assert!(!r.observe(530, || sample(530), &cfg).unwrap());
     }
 
     #[test]

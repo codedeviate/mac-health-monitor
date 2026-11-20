@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Markdown health report: findings, incidents, history timeline, current state and sources
 - Health report generation (the newest `keep_reports`, default 20, are kept) and detection of crash-caused reboots
 - "Health report…" menu item (generated in the background and opened), "⚠ Crashed at …" line after a crash-caused reboot, and history recording in the running app
+- Crash detection runs in the background and is re-checked once a minute for about 20 minutes after boot, so the "⚠ Crashed at …" line still appears when macOS finishes writing the panic report after the app has started at login
+- The report's history timeline looks back from the newest crash (kernel panic or hang-reset), else the newest memory-pressure kills, and names it in its heading; when that hour has no history, the last 60 minutes are shown as well
 
 ## [0.1.1] - 2026-11-07
 

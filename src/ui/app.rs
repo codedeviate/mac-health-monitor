@@ -1,6 +1,6 @@
 //! Application delegate: owns the status item, the menu, the monitor and the refresh timer.
 
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Instant;
 
 use objc2::rc::{Retained, autoreleasepool};
-use objc2::runtime::{AnyObject, ProtocolObject};
+use objc2::runtime::{AnyObject, ProtocolObject, Sel};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSMenu, NSStatusBar,
@@ -19,7 +19,7 @@ use objc2_foundation::{
 };
 
 use super::{icons, menu};
-use crate::clock::now_unix;
+use crate::clock::{boot_time, now_unix};
 use crate::config::{config_path, load_or_create};
 use crate::history::{HistorySample, Recorder, history_path};
 use crate::menu_model::{MenuModel, ReportState};
@@ -27,7 +27,7 @@ use crate::monitor::Monitor;
 use crate::report::{self, Crash};
 use crate::{metrics, processes};
 
-/// How often the main thread checks whether a background report has finished.
+/// How often the main thread checks whether a background report or crash check has finished.
 const REPORT_POLL_SECS: f64 = 0.25;
 
 type ReportResult = Result<PathBuf, String>;
@@ -40,10 +40,18 @@ pub struct Ivars {
     recorder: RefCell<Recorder>,
     /// Unacknowledged crash behind the current boot; shown as the menu's first line.
     crash: RefCell<Option<Crash>>,
+    /// Result channel and poll timer of the running crash check, if any.
+    crash_rx: RefCell<Option<Receiver<Option<Crash>>>>,
+    crash_timer: RefCell<Option<Retained<NSTimer>>>,
+    /// When the last crash check was started.
+    crash_checked_at: Cell<Option<i64>>,
     report: RefCell<ReportState>,
     /// Result channel and poll timer of the report being generated, if any.
     report_rx: RefCell<Option<Receiver<ReportResult>>>,
     report_timer: RefCell<Option<Retained<NSTimer>>>,
+    /// Crash shown when the running report started; only that one is acknowledged by it, since
+    /// a crash found later by a re-check may not be in that report.
+    report_crash: Cell<Option<Crash>>,
     /// Menu from the latest refresh, so report-state changes can re-render without resampling.
     last_menu: RefCell<Option<MenuModel>>,
 }
@@ -70,8 +78,7 @@ define_class!(
             let item = NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
             item.setMenu(Some(&self.ivars().menu));
             let _ = self.ivars().status_item.set(item);
-            let crash = report::startup_crash(self.ivars().monitor.borrow().config());
-            *self.ivars().crash.borrow_mut() = crash;
+            // The first refresh also starts the crash check in the background.
             self.refresh();
             self.schedule_timer();
         }
@@ -88,6 +95,12 @@ define_class!(
         #[unsafe(method(reportPoll:))]
         fn report_poll(&self, _timer: &NSTimer) {
             self.poll_report();
+        }
+
+        // SAFETY: the signature matches an NSTimer action (`- (void)crashPoll:(NSTimer *)timer`).
+        #[unsafe(method(crashPoll:))]
+        fn crash_poll(&self, _timer: &NSTimer) {
+            self.poll_crash();
         }
 
         // SAFETY: the signature matches a menu item action (`- (void)healthReport:(id)sender`).
@@ -132,9 +145,13 @@ impl AppDelegate {
             timer: RefCell::new(None),
             recorder: RefCell::new(Recorder::new(history_path())),
             crash: RefCell::new(None),
+            crash_rx: RefCell::new(None),
+            crash_timer: RefCell::new(None),
+            crash_checked_at: Cell::new(None),
             report: RefCell::new(ReportState::Idle),
             report_rx: RefCell::new(None),
             report_timer: RefCell::new(None),
+            report_crash: Cell::new(None),
             last_menu: RefCell::new(None),
         });
         // SAFETY: NSObject's `init` has this signature.
@@ -177,6 +194,79 @@ impl AppDelegate {
             *self.ivars().last_menu.borrow_mut() = Some(tick.menu);
             self.render_menu();
         });
+        self.maybe_check_crash();
+    }
+
+    /// Starts crash detection on a background thread when it is due (see
+    /// `report::should_check_crash`).
+    fn maybe_check_crash(&self) {
+        let now = now_unix();
+        let known = self.ivars().crash.borrow().is_some();
+        let running = self.ivars().crash_rx.borrow().is_some();
+        let last = self.ivars().crash_checked_at.get();
+        if !report::should_check_crash(now, boot_time(), last, known, running) {
+            return;
+        }
+        self.ivars().crash_checked_at.set(Some(now));
+        let config = self.ivars().monitor.borrow().config().clone();
+        let (tx, rx) = mpsc::channel();
+        let spawned = thread::Builder::new()
+            .name("crash-check".into())
+            .spawn(move || {
+                // The receiver may be gone if the app is quitting; nothing to do then.
+                let _ = tx.send(report::startup_crash(&config));
+            });
+        if let Err(e) = spawned {
+            eprintln!("crash check: could not start: {e}");
+            return;
+        }
+        *self.ivars().crash_rx.borrow_mut() = Some(rx);
+        let timer = self.poll_timer(sel!(crashPoll:));
+        if let Some(old) = self.ivars().crash_timer.borrow_mut().replace(timer) {
+            old.invalidate();
+        }
+    }
+
+    /// Main-thread completion of a background crash check: shows the crash line if one was
+    /// found. Does nothing until the result has arrived.
+    fn poll_crash(&self) {
+        let found = {
+            let rx = self.ivars().crash_rx.borrow();
+            let Some(rx) = rx.as_ref() else {
+                return;
+            };
+            match rx.try_recv() {
+                Ok(c) => c,
+                Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => None,
+            }
+        };
+        *self.ivars().crash_rx.borrow_mut() = None;
+        if let Some(timer) = self.ivars().crash_timer.borrow_mut().take() {
+            timer.invalidate();
+        }
+        if found.is_some() {
+            *self.ivars().crash.borrow_mut() = found;
+            self.render_menu();
+        }
+    }
+
+    /// A repeating timer calling `action` on `self` every `REPORT_POLL_SECS`, added to the
+    /// main run loop in the common modes so it also fires while the menu is open.
+    fn poll_timer(&self, action: Sel) -> Retained<NSTimer> {
+        // SAFETY: callers pass a selector `self` implements with the NSTimer action signature.
+        let timer = unsafe {
+            NSTimer::timerWithTimeInterval_target_selector_userInfo_repeats(
+                REPORT_POLL_SECS,
+                self.as_ref(),
+                action,
+                None,
+                true,
+            )
+        };
+        // SAFETY: NSRunLoopCommonModes is an immutable Foundation constant; the timer is valid.
+        unsafe { NSRunLoop::mainRunLoop().addTimer_forMode(&timer, NSRunLoopCommonModes) };
+        timer
     }
 
     /// Renders the latest menu model with the current crash line and report state.
@@ -220,18 +310,8 @@ impl AppDelegate {
         }
         *self.ivars().report.borrow_mut() = ReportState::Busy;
         *self.ivars().report_rx.borrow_mut() = Some(rx);
-        // SAFETY: `self` implements `reportPoll:` with the NSTimer action signature.
-        let timer = unsafe {
-            NSTimer::timerWithTimeInterval_target_selector_userInfo_repeats(
-                REPORT_POLL_SECS,
-                self.as_ref(),
-                sel!(reportPoll:),
-                None,
-                true,
-            )
-        };
-        // SAFETY: NSRunLoopCommonModes is an immutable Foundation constant; the timer is valid.
-        unsafe { NSRunLoop::mainRunLoop().addTimer_forMode(&timer, NSRunLoopCommonModes) };
+        self.ivars().report_crash.set(*self.ivars().crash.borrow());
+        let timer = self.poll_timer(sel!(reportPoll:));
         if let Some(old) = self.ivars().report_timer.borrow_mut().replace(timer) {
             old.invalidate();
         }
@@ -259,10 +339,16 @@ impl AppDelegate {
         let state = match result {
             Ok(path) => {
                 open_report(path);
-                if let Some(crash) = self.ivars().crash.borrow_mut().take()
-                    && let Err(e) = report::acknowledge(crash.time)
+                let shown = self.ivars().report_crash.take();
+                let mut crash = self.ivars().crash.borrow_mut();
+                if let Some(c) = shown
+                    && *crash == shown
                 {
-                    eprintln!("could not record crash acknowledgement: {e}");
+                    *crash = None;
+                    drop(crash);
+                    if let Err(e) = report::acknowledge(c.time) {
+                        eprintln!("could not record crash acknowledgement: {e}");
+                    }
                 }
                 ReportState::Idle
             }

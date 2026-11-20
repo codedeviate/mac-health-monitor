@@ -9,7 +9,7 @@ use crate::menu_model::{Indicator, build, culprit_label, fmt_gb, fmt_gib};
 use crate::status::Status;
 
 use super::ReportInput;
-use super::findings::{findings, fmt_mem};
+use super::findings::{findings, fmt_mem, low_swap};
 
 /// The timeline covers this long before its anchor.
 const TIMELINE_SECS: i64 = 60 * 60;
@@ -150,25 +150,59 @@ fn reset_section(out: &mut String, r: &Reset) {
     );
 }
 
-fn timeline(out: &mut String, input: &ReportInput) {
-    let anchor = input.incidents.iter().map(Incident::time).max();
-    let title = if anchor.is_some() {
-        "Before the last incident"
-    } else {
-        "Last 60 minutes"
-    };
-    let anchor = anchor.unwrap_or(input.now);
-    let _ = writeln!(out, "\n## {title}\n");
+/// What the timeline looks back from: the newest crash (panic or hang-reset), else the
+/// newest memory-pressure event with low-swap kills, else now.
+fn timeline_anchor(input: &ReportInput) -> Option<(i64, &'static str)> {
+    let crash = input
+        .incidents
+        .iter()
+        .filter_map(|i| match i {
+            Incident::Panic(p) => Some((p.time, "the kernel panic")),
+            Incident::Reset(r) if r.is_watchdog() => Some((r.time, "the hang-reset")),
+            _ => None,
+        })
+        .max_by_key(|(t, _)| *t);
+    crash.or_else(|| {
+        input
+            .incidents
+            .iter()
+            .filter_map(|i| match i {
+                Incident::Jetsam(j) if low_swap(j) > 0 => {
+                    Some((j.time, "the memory-pressure kills"))
+                }
+                _ => None,
+            })
+            .max_by_key(|(t, _)| *t)
+    })
+}
 
-    let start = anchor - TIMELINE_SECS;
+fn timeline(out: &mut String, input: &ReportInput) {
+    if let Some((anchor, what)) = timeline_anchor(input) {
+        let _ = writeln!(
+            out,
+            "\n## Before {what} at {}\n",
+            fmt_local(anchor, Pattern::DateHm)
+        );
+        if timeline_table(out, input, anchor) {
+            return;
+        }
+    }
+    out.push_str("\n## Last 60 minutes\n\n");
+    timeline_table(out, input, input.now);
+}
+
+/// The 60 minutes of history before `end`, or a line saying there is none.
+/// Returns whether there was any history.
+fn timeline_table(out: &mut String, input: &ReportInput, end: i64) -> bool {
+    let start = end - TIMELINE_SECS;
     let samples: Vec<&HistorySample> = input
         .history
         .iter()
-        .filter(|s| s.t >= start && s.t <= anchor)
+        .filter(|s| s.t >= start && s.t <= end)
         .collect();
     if samples.is_empty() {
         out.push_str("No history available for this period.\n");
-        return;
+        return false;
     }
 
     let max_gap =
@@ -178,7 +212,7 @@ fn timeline(out: &mut String, input: &ReportInput) {
     );
     let mut in_gap = false;
     let mut mark = start;
-    while mark <= anchor {
+    while mark <= end {
         let nearest = samples.iter().min_by_key(|s| (s.t - mark).abs());
         match nearest.filter(|s| (s.t - mark).abs() <= max_gap) {
             Some(s) => {
@@ -199,6 +233,7 @@ fn timeline(out: &mut String, input: &ReportInput) {
         mark += TIMELINE_STEP_SECS;
     }
     worst_row(out, &samples);
+    true
 }
 
 /// The five value cells of a timeline row.
@@ -289,7 +324,7 @@ mod tests {
 
     use super::*;
     use crate::config::Config;
-    use crate::diag::{Incident, Jetsam, Panic, ProcGroup};
+    use crate::diag::{Incident, Jetsam, Panic, ProcGroup, Reset, Watchdog};
     use crate::eval::Evaluation;
     use crate::history::HistorySample;
     use crate::metrics::Snapshot;
@@ -416,6 +451,92 @@ mod tests {
         let out = render(&i);
         assert_eq!(out.matches("no data").count(), 1, "{out}");
         assert!(out.contains("Worst"), "{out}");
+    }
+
+    fn idle_exit_jetsam_at(time: i64) -> Incident {
+        let Incident::Jetsam(mut j) = jetsam_at(time) else {
+            unreachable!()
+        };
+        j.kills = BTreeMap::from([("idle-exit".to_string(), 30)]);
+        Incident::Jetsam(j)
+    }
+
+    fn spin_at(time: i64) -> Incident {
+        Incident::Watchdog(Watchdog {
+            time,
+            service: Some("configd".into()),
+            reason: "slow".into(),
+        })
+    }
+
+    #[test]
+    fn timeline_anchored_on_panic_not_later_noise() {
+        let mut i = input();
+        let p = NOW - 3 * 3600;
+        i.incidents = vec![
+            panic_at(p),
+            idle_exit_jetsam_at(NOW - 120),
+            spin_at(NOW - 60),
+        ];
+        i.history = (0..=60).map(|m| p - m * 60).map(sample).collect();
+        let out = render(&i);
+        let heading = format!(
+            "## Before the kernel panic at {}",
+            fmt_local(p, Pattern::DateHm)
+        );
+        assert!(out.contains(&heading), "{out}");
+        assert!(!out.contains("Before the last incident"), "{out}");
+        assert!(out.contains("Worst"), "{out}");
+        assert!(!out.contains("## Last 60 minutes"), "{out}");
+    }
+
+    #[test]
+    fn timeline_heading_names_reset_and_kills() {
+        let mut i = input();
+        i.incidents = vec![
+            jetsam_at(NOW - 600),
+            Incident::Reset(Reset {
+                time: NOW - 1200,
+                boot_faults: "wdog,reset_in_1".into(),
+            }),
+        ];
+        let out = render(&i);
+        let heading = format!(
+            "## Before the hang-reset at {}",
+            fmt_local(NOW - 1200, Pattern::DateHm)
+        );
+        assert!(out.contains(&heading), "{out}");
+
+        i.incidents = vec![jetsam_at(NOW - 600), idle_exit_jetsam_at(NOW - 60)];
+        let out = render(&i);
+        let heading = format!(
+            "## Before the memory-pressure kills at {}",
+            fmt_local(NOW - 600, Pattern::DateHm)
+        );
+        assert!(out.contains(&heading), "{out}");
+
+        i.incidents = vec![idle_exit_jetsam_at(NOW - 60), spin_at(NOW - 30)];
+        let out = render(&i);
+        assert!(out.contains("## Last 60 minutes"), "{out}");
+        assert!(!out.contains("## Before"), "{out}");
+    }
+
+    #[test]
+    fn timeline_without_anchor_history_also_shows_last_hour() {
+        let mut i = input();
+        let p = NOW - 2 * 86_400;
+        i.incidents = vec![panic_at(p)];
+        i.history = (0..=60).map(|m| NOW - m * 60).map(sample).collect();
+        let out = render(&i);
+        let before = out
+            .find("## Before the kernel panic at")
+            .expect("anchor heading");
+        let none = out
+            .find("No history available for this period.")
+            .expect("no-history line");
+        let last = out.find("## Last 60 minutes").expect("last-hour heading");
+        assert!(before < none && none < last, "{out}");
+        assert!(out[last..].contains("Worst"), "{out}");
     }
 
     #[test]

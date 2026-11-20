@@ -39,6 +39,18 @@ pub struct MenuModel {
     pub report: ReportState,
 }
 
+/// Longest error message shown on the menu's "report failed" line, in characters.
+pub const REPORT_ERROR_MAX_CHARS: usize = 80;
+
+/// The menu line shown after a report failed.
+pub fn report_failed_line(msg: &str) -> String {
+    if msg.chars().count() <= REPORT_ERROR_MAX_CHARS {
+        return format!("⚠ report failed: {msg}");
+    }
+    let short: String = msg.chars().take(REPORT_ERROR_MAX_CHARS - 1).collect();
+    format!("⚠ report failed: {short}…")
+}
+
 /// Decimal gigabytes with one decimal place, e.g. `142.3 GB`.
 pub fn fmt_gb(bytes: u64) -> String {
     format!("{:.1} GB", bytes as f64 / GB)
@@ -216,5 +228,22 @@ mod tests {
         assert_eq!(m.culprits[0].label, "claude (×3)");
         assert_eq!(m.culprits[1].label, "Arc");
         assert_eq!(m.config_error.as_deref(), Some("bad"));
+    }
+    #[test]
+    fn report_failed_line_caps_message() {
+        assert_eq!(
+            report_failed_line("disk full"),
+            "⚠ report failed: disk full"
+        );
+        let long = "é".repeat(200);
+        let line = report_failed_line(&long);
+        let msg = line.strip_prefix("⚠ report failed: ").unwrap();
+        assert_eq!(msg.chars().count(), REPORT_ERROR_MAX_CHARS);
+        assert!(msg.ends_with('…'));
+        let exact = "x".repeat(REPORT_ERROR_MAX_CHARS);
+        assert_eq!(
+            report_failed_line(&exact),
+            format!("⚠ report failed: {exact}")
+        );
     }
 }
