@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Configuration for the history recorder and health report (`[history]`, `[report]`)
 - Local-time formatting and boot-time lookup for reports
+- History recorder: one sample per minute to `~/Library/Logs/mac-health-monitor/history.jsonl`, kept 24 h, synced to disk so it survives a crash
 
 ## [0.1.1] - 2026-11-07
 

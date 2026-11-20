@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crate::config::{Config, ConfigError};
-use crate::eval::Evaluator;
+use crate::eval::{Evaluation, Evaluator};
 use crate::menu_model::{self, MenuModel};
 use crate::metrics::Snapshot;
 use crate::processes::{self, Culprit, ProcInfo};
@@ -13,6 +13,8 @@ pub struct Tick {
     pub icon: IconKind,
     pub status: Status,
     pub menu: MenuModel,
+    pub eval: Evaluation,
+    pub culprits: Vec<Culprit>,
 }
 
 /// Ties sampling, evaluation, culprit grouping and the menu model together.
@@ -80,7 +82,13 @@ impl Monitor {
         let eval = self.evaluator.evaluate(snap, &self.config);
         let (icon, status) = select_icon(&eval.overall());
         let menu = menu_model::build(snap, &eval, &self.culprits, self.config_error.as_deref());
-        Tick { icon, status, menu }
+        Tick {
+            icon,
+            status,
+            menu,
+            eval,
+            culprits: self.culprits.clone(),
+        }
     }
 }
 
@@ -157,6 +165,22 @@ mod tests {
             vec![]
         });
         assert_eq!(calls, 2);
+    }
+
+    #[test]
+    fn tick_exposes_eval_and_culprits() {
+        let procs = vec![ProcInfo {
+            pid: 1,
+            path: "/usr/bin/foo".into(),
+            argv0: "foo".into(),
+            footprint_bytes: 1_000_000_000,
+        }];
+        let cfg = Config::default();
+        let expected = processes::group(&procs, cfg.culprits_count).len();
+        let t = Monitor::new(Ok(cfg)).tick(&ok_snap(), Instant::now(), || procs);
+        assert_eq!(t.eval.swap, Status::Ok);
+        assert_eq!(t.culprits.len(), expected);
+        assert!(expected > 0);
     }
 
     #[test]

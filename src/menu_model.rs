@@ -44,6 +44,15 @@ fn row(indicator: Indicator, label: &str, value: String) -> Row {
     }
 }
 
+/// Culprit label, with a "(×N)" suffix when it stands for several processes.
+pub fn culprit_label(c: &Culprit) -> String {
+    if c.count > 1 {
+        format!("{} (×{})", c.label, c.count)
+    } else {
+        c.label.clone()
+    }
+}
+
 pub fn build(
     s: &Snapshot,
     e: &Evaluation,
@@ -92,17 +101,10 @@ pub fn build(
     ];
     let culprits = culprits
         .iter()
-        .map(|c| {
-            let label = if c.count > 1 {
-                format!("{} (×{})", c.label, c.count)
-            } else {
-                c.label.clone()
-            };
-            Row {
-                indicator: Indicator::None,
-                label,
-                value: fmt_gib(c.bytes),
-            }
+        .map(|c| Row {
+            indicator: Indicator::None,
+            label: culprit_label(c),
+            value: fmt_gib(c.bytes),
         })
         .collect();
     MenuModel {

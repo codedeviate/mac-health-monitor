@@ -16,7 +16,35 @@ pub enum PressureLevel {
     Critical,
 }
 
+impl Status {
+    pub fn as_u8(self) -> u8 {
+        match self {
+            Status::Ok => 0,
+            Status::Warning => 1,
+            Status::Critical => 2,
+        }
+    }
+
+    /// 0 is Ok, 1 Warning, 2 Critical; anything else is Ok.
+    pub fn from_u8(v: u8) -> Status {
+        match v {
+            1 => Status::Warning,
+            2 => Status::Critical,
+            _ => Status::Ok,
+        }
+    }
+}
+
 impl PressureLevel {
+    /// The raw kernel value: 1 Normal, 2 Warning, 4 Critical.
+    pub fn raw(self) -> u8 {
+        match self {
+            PressureLevel::Normal => 1,
+            PressureLevel::Warning => 2,
+            PressureLevel::Critical => 4,
+        }
+    }
+
     /// Maps the raw kernel value: 2 is Warning, 4 is Critical, anything else is Normal.
     pub fn from_raw(v: i32) -> PressureLevel {
         match v {
