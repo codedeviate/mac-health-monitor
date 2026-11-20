@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parsers for macOS kernel panic, watchdog, memory-pressure (Jetsam) and reset reports
 - Discovery of recent incident reports in `/Library/Logs/DiagnosticReports`; unreadable files become notes, never errors
 - Plain-language findings ("What this suggests") derived from incidents, current state and history
+- Markdown health report: findings, incidents, history timeline, current state and sources
 
 ## [0.1.1] - 2026-11-07
 

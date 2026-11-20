@@ -1,6 +1,7 @@
 //! Health report: everything gathered for one report, and the pure logic built on it.
 
 pub mod findings;
+pub mod render;
 
 use crate::config::Config;
 use crate::diag::Incident;
