@@ -8,13 +8,16 @@ use crate::history::HistorySample;
 use crate::menu_model::{Indicator, build, culprit_label, fmt_gb, fmt_gib};
 use crate::status::Status;
 
-use super::ReportInput;
 use super::findings::{findings, fmt_mem, low_swap};
+use super::{CRASH_WINDOW_SECS, ReportInput};
 
 /// The timeline covers this long before its anchor.
 const TIMELINE_SECS: i64 = 60 * 60;
 /// One timeline row per this many seconds.
 const TIMELINE_STEP_SECS: i64 = 5 * 60;
+/// A watchdog reset at most this long after a panic is the reboot that panic caused: the panic
+/// may be up to `CRASH_WINDOW_SECS` before boot and the reset up to as long after it.
+const SAME_CRASH_SECS: i64 = 2 * CRASH_WINDOW_SECS;
 /// Apps listed per jetsam event.
 const JETSAM_TOP_APPS: usize = 10;
 const NO_DATA_ROW: &str = "| — | no data (asleep or app not running) | | | | |";
@@ -151,17 +154,32 @@ fn reset_section(out: &mut String, r: &Reset) {
 }
 
 /// What the timeline looks back from: the newest crash (panic or hang-reset), else the
-/// newest memory-pressure event with low-swap kills, else now.
+/// newest memory-pressure event with low-swap kills, else now (`None`).
 fn timeline_anchor(input: &ReportInput) -> Option<(i64, &'static str)> {
-    let crash = input
+    let newest_panic = input
         .incidents
         .iter()
         .filter_map(|i| match i {
-            Incident::Panic(p) => Some((p.time, "the kernel panic")),
-            Incident::Reset(r) if r.is_watchdog() => Some((r.time, "the hang-reset")),
+            Incident::Panic(p) => Some(p.time),
             _ => None,
         })
-        .max_by_key(|(t, _)| *t);
+        .max();
+    let newest_reset = input
+        .incidents
+        .iter()
+        .filter_map(|i| match i {
+            Incident::Reset(r) if r.is_watchdog() => Some(r.time),
+            _ => None,
+        })
+        .max();
+    let crash = match (newest_panic, newest_reset) {
+        // A reset written after the reboot a panic caused is that same crash (spec section 5:
+        // identified by the panic time).
+        (Some(p), Some(r)) if r - p > SAME_CRASH_SECS => Some((r, "the hang-reset")),
+        (Some(p), _) => Some((p, "the kernel panic")),
+        (None, Some(r)) => Some((r, "the hang-reset")),
+        (None, None) => None,
+    };
     crash.or_else(|| {
         input
             .incidents
@@ -519,6 +537,26 @@ mod tests {
         let out = render(&i);
         assert!(out.contains("## Last 60 minutes"), "{out}");
         assert!(!out.contains("## Before"), "{out}");
+    }
+
+    #[test]
+    fn timeline_reset_after_panic_is_the_panic() {
+        // The reset counter is written after the reboot the panic caused: one crash.
+        let mut i = input();
+        let p = NOW - 3000;
+        i.incidents = vec![
+            panic_at(p),
+            Incident::Reset(Reset {
+                time: p + 110,
+                boot_faults: "wdog,reset_in_1".into(),
+            }),
+        ];
+        let out = render(&i);
+        let heading = format!(
+            "## Before the kernel panic at {}",
+            fmt_local(p, Pattern::DateHm)
+        );
+        assert!(out.contains(&heading), "{out}");
     }
 
     #[test]
