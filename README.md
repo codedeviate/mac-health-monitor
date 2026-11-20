@@ -29,9 +29,40 @@ Clicking the icon opens a menu with:
   available, memory pressure, swap used and compressed memory
 - a "Potential culprits" section with the top memory consumers, grouped by app
   (for example `Arc Helper (Renderer)` counts toward `Arc`)
+- Health report... (see below)
 - Open config..., Reload config and Quit
 
 Memory pressure and compressed memory are informational and do not affect the icon.
+
+## Health report
+
+"Health report..." in the menu builds a Markdown report in the background and opens
+it. It answers "why did my Mac misbehave or restart?" and contains:
+
+- **What this suggests**: plain-language, hedged findings (for example that memory
+  ran out before a crash, that swap has stayed high, or that a restart may help),
+  each citing the numbers behind it
+- **Incidents** from the last `incident_days` days: kernel panics, memory-pressure
+  (jetsam) events, watchdog timeouts and resets
+- **A timeline** of disk, memory and swap from the recorded history
+- **Now**: the current readings and top memory consumers
+- **Sources**: which files were read, and any that could not be parsed
+
+While it runs, the app records one small sample of its readings per minute so the
+report can show what led up to an incident.
+
+**Where things are stored.** History and reports live in
+`~/Library/Logs/mac-health-monitor/` (`history.jsonl` and `reports/`). The newest
+`keep_reports` reports are kept.
+
+**Crash line.** After a reboot caused by a crash, the menu shows a
+"⚠ Crashed at ..." line. It disappears once you open a health report, or after
+`incident_days` days.
+
+**What it reads.** The app only reads the macOS diagnostics folder
+`/Library/Logs/DiagnosticReports` (and its `Retired` subfolder). It never runs
+`log`, `sysdiagnose` or `spindump`. A missing or unreadable file never stops the
+report; it becomes a note under Sources.
 
 ## Thresholds and units
 
@@ -74,6 +105,10 @@ config is kept and the menu shows a config error line.
 | `[memory] use_pressure_level` | true | Also use the kernel memory-pressure level |
 | `[swap] warn_used_gb` | 4 | Yellow above this swap used (GiB) |
 | `[swap] crit_used_gb` | 10 | Red above this swap used (GiB) |
+| `[history] interval_secs` | 60 | Seconds between history samples (>= 10) |
+| `[history] retain_hours` | 24 | Hours of history kept (1-168) |
+| `[report] incident_days` | 7 | Days of incidents a report covers; also how long the crash line can show (1-30) |
+| `[report] keep_reports` | 20 | Saved reports kept; older ones are removed (1-500) |
 
 Unknown keys are rejected, and each critical threshold must be on the worse side of
 its warning threshold.
