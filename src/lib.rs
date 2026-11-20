@@ -1,5 +1,6 @@
 pub mod clock;
 pub mod config;
+pub mod diag;
 pub mod eval;
 pub mod history;
 pub mod menu_model;
