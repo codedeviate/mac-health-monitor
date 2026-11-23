@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-11-23
+
 ### Added
 
 - App icon: a traffic light on green with a fast car, shown in Finder and the About panel
