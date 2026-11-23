@@ -6,7 +6,7 @@ DEST_APP := $(HOME)/Applications/MacHealthMonitor.app
 AGENT    := $(HOME)/Library/LaunchAgents/$(LABEL).plist
 UID_NUM  := $(shell id -u)
 
-.PHONY: build app install uninstall run
+.PHONY: build app icon install uninstall run
 
 build:
 	cargo build --release
@@ -16,6 +16,18 @@ app: build
 	mkdir -p "$(APP)/Contents/MacOS"
 	cp "target/release/$(NAME)" "$(APP)/Contents/MacOS/$(NAME)"
 	sed 's/@VERSION@/$(VERSION)/g' packaging/Info.plist > "$(APP)/Contents/Info.plist"
+	mkdir -p "$(APP)/Contents/Resources"
+	cp packaging/AppIcon.icns "$(APP)/Contents/Resources/AppIcon.icns"
+
+# Regenerates packaging/AppIcon.icns from packaging/AppIcon.svg (needs Inkscape and ImageMagick).
+icon:
+	mkdir -p target/AppIcon.iconset
+	inkscape packaging/AppIcon.svg --export-type=png --export-filename=target/AppIcon-1024.png -w 1024
+	for s in 16 32 128 256 512; do \
+		magick target/AppIcon-1024.png -resize $${s}x$${s} target/AppIcon.iconset/icon_$${s}x$${s}.png; \
+		magick target/AppIcon-1024.png -resize $$((s*2))x$$((s*2)) target/AppIcon.iconset/icon_$${s}x$${s}@2x.png; \
+	done
+	iconutil -c icns target/AppIcon.iconset -o packaging/AppIcon.icns
 
 # bootout is asynchronous: wait (up to ~5 s) until the job is gone before bootstrapping.
 define WAIT_UNLOADED
