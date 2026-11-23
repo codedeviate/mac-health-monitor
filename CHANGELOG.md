@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- "About Mac Health Monitor" menu item showing the version and a short description of the app
+
 ## [0.2.0] - 2026-11-20
 
 ### Added

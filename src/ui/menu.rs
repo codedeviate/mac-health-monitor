@@ -95,7 +95,7 @@ fn row_item(mtm: MainThreadMarker, row: &Row) -> Retained<NSMenuItem> {
 }
 
 /// Replaces the contents of `menu` with `model`. The crash, report and config items target
-/// `target`, which must implement `healthReport:`, `openConfig:` and `reloadConfig:`.
+/// `target`, which must implement `healthReport:`, `openConfig:`, `reloadConfig:` and `about:`.
 pub fn render(menu: &NSMenu, model: &MenuModel, target: &AnyObject) {
     let mtm = menu.mtm();
     menu.setAutoenablesItems(false);
@@ -149,16 +149,25 @@ pub fn render(menu: &NSMenu, model: &MenuModel, target: &AnyObject) {
         Some(sel!(reloadConfig:)),
         ns_string!(""),
     );
+    let about = item(
+        mtm,
+        "About Mac Health Monitor",
+        Some(sel!(about:)),
+        ns_string!(""),
+    );
     let quit = item(mtm, "Quit", Some(sel!(terminate:)), ns_string!("q"));
     let app = NSApp(mtm);
-    // SAFETY: `target` implements openConfig:/reloadConfig: (caller contract) and
+    // SAFETY: `target` implements openConfig:/reloadConfig:/about: (caller contract) and
     // NSApplication implements terminate:. NSMenuItem targets are weak; both outlive the menu.
     unsafe {
         open.setTarget(Some(target));
         reload.setTarget(Some(target));
+        about.setTarget(Some(target));
         quit.setTarget(Some(&app));
     }
     menu.addItem(&open);
     menu.addItem(&reload);
+    menu.addItem(&NSMenuItem::separatorItem(mtm));
+    menu.addItem(&about);
     menu.addItem(&quit);
 }

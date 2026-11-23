@@ -18,7 +18,7 @@ use objc2_foundation::{
     NSNotification, NSObject, NSObjectProtocol, NSRunLoop, NSRunLoopCommonModes, NSTimer,
 };
 
-use super::{icons, menu};
+use super::{about, icons, menu};
 use crate::clock::{boot_time, now_unix};
 use crate::config::{config_path, load_or_create};
 use crate::history::{HistorySample, Recorder, history_path};
@@ -117,6 +117,12 @@ define_class!(
                 Ok(s) => eprintln!("open config: `open -t` exited with {s}"),
                 Err(e) => eprintln!("open config: {e}"),
             }
+        }
+
+        // SAFETY: the signature matches a menu item action (`- (void)about:(id)sender`).
+        #[unsafe(method(about:))]
+        fn about(&self, _sender: Option<&AnyObject>) {
+            about::show(self.mtm());
         }
 
         // SAFETY: the signature matches a menu item action (`- (void)reloadConfig:(id)sender`).
